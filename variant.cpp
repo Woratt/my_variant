@@ -2,6 +2,9 @@
 #include <variant>
 #include <new>
 
+template<typename... Types>
+class variant;
+
 template<int N, typename T, typename... Types>
 struct get_index_by_type{
     static const int index = -1;
@@ -13,20 +16,40 @@ struct get_index_by_type<N, T, Head, Tail...>
     static const int index = std::is_same_v<T, Head>? N : get_index_by_type<N + 1, T, Tail...>::index;
 };
 
-template<size_t N, typename T, typename... Tail>
-struct is_equalities
+template<int N,typename T, typename... Types>
+struct get_type_by_index
 {
-    static const is_bool = 1;
+    using type = typename get_type_by_index<N - 1, Types...>::type;
 };
 
-
-template<int N, typename Head1, typename Head2, typename... Tail>
-struct is_equalities<N, Head1, Head2, Tail...>{
-    static const is_bool = (std::is_same_v<T, Head> || N = 0) ? is_equalities<N-1, , Tail...>::is_bool : 0;
+template<typename T, typename... Types>
+struct get_type_by_index<0, T, Types...>
+{
+    using type = T;
 };
 
-template<typename... Types>
-class variant;
+template<size_t index, typename... Types>
+struct is_equal{
+    static bool equal(size_t current_index, const variant<Types...>& lhs, const variant<Types...>& rhs) {
+        if (current_index == index) {
+            using T = typename get_type_by_index<index, Types...>::type;
+            
+            if constexpr (std::is_same_v<
+                decltype(lhs. template get<T>()), 
+                decltype(rhs. template get<T>())>) {
+                return lhs.template get<T>() == rhs.template get<T>();
+            } else {
+                return false;
+            }
+        } else {
+            if constexpr (index + 1 < sizeof...(Types)) {
+                return is_equal<index + 1, Types...>::equal(current_index, lhs, rhs);
+            } else {
+                return false;
+            }
+        }
+    }
+};
 
 template<typename T, typename... Types>
 struct VariantAlternative{
@@ -101,6 +124,14 @@ private:
                 tail. template get_value<N-1, T>();
             }
         }
+        template<size_t N ,typename T>
+        const T& get_value() const noexcept{
+            if constexpr(N == 0){
+                return head;
+            }else{
+                tail. template get_value<N-1, T>();
+            }
+        }
 
         template<size_t N, typename T>
         void des(){
@@ -120,13 +151,13 @@ private:
         return current;
     }
 
-    template<typename T>
+    //template<typename T>
     bool operator==(const variant& other) const noexcept{
-        if (current != other->current){
+        if (current != other.current){
             return false;
         }
         else{
-            return is_equalities<current, >::is_bool;
+            return is_equal<0, Types...>::equal(other.current, other, *this);
         }
     }
 
@@ -148,6 +179,14 @@ private:
 
     template<typename T>
     T& get() {
+        if (current == get_index_by_type<0, T, Types...>::index){
+            return storage. template get_value<get_index_by_type<0, T, Types...>::index, T>();
+        }else{
+            throw std::bad_alloc();
+        }
+    } 
+    template<typename T>
+    const T& get() const {
         if (current == get_index_by_type<0, T, Types...>::index){
             return storage. template get_value<get_index_by_type<0, T, Types...>::index, T>();
         }else{
@@ -206,32 +245,15 @@ class S{
     }
 };
 
-/*class any{
-private:
-    void* storage;
-
-public:
-
-    template<typename U>
-    any(const U& value): storage(new U(value)){}
-
-    template<typename U>
-    any(U&& value) noexcept : storage(new U(value)){}
-};*/
-
 
 int main(){
-    /*variant<int, double, S> f(S(4));
-    variant<int, double, std::string> g(5);
-    variant<int, double> h(4);
-    //g = h;
-    std::cout << g.get<int>() << "\n";
-    g = 6.7;
-    std::cout << f.holds_alternative<S>() << "\n";
-    std::cout << g.holds_alternative<double>() << "\n";*/
-    std::variant<int, double> f;
-    std::variant<int, double> g;
+    variant<int, double> f(3);
+    variant<int, double> g(7);
+    f = g;
     std::cout << (f == g) << "\n";
+    //std::variant<int, double> f;
+    //std::variant<int, double> g;
+    //std::cout << (f == g) << "\n";
 
     return 0;
 }
