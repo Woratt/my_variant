@@ -7,13 +7,13 @@ class variant;
 
 template<int N, typename T, typename... Types>
 struct get_index_by_type{
-    static const int index = -1;
+    static const size_t index = 0;
 };
 
 template<int N, typename T, typename Head, typename... Tail>
 struct get_index_by_type<N, T, Head, Tail...>
 {
-    static const int index = std::is_same_v<T, Head>? N : get_index_by_type<N + 1, T, Tail...>::index;
+    static const size_t index = std::is_same_v<T, Head>? N : get_index_by_type<N + 1, T, Tail...>::index;
 };
 
 template<int N,typename T, typename... Types>
@@ -58,14 +58,14 @@ struct VariantAlternative{
 
     VariantAlternative(const T& value) noexcept{
         static_cast<Derived*>(this)->storage. template put<get_index_by_type<0, T, Types...>::index>(value);
-        static_cast<Derived*>(this)->current = get_index_by_type<0, T, Types...>::index;
+        static_cast<Derived*>(this)-> template set_current<get_index_by_type<0, T, Types...>::index>();
     }
 
     VariantAlternative() noexcept{}
 
     VariantAlternative(T&& value) noexcept{
         static_cast<Derived*>(this)->storage. template put<get_index_by_type<0, T, Types...>::index>(std::move(value));
-        static_cast<Derived*>(this)->current = get_index_by_type<0, T, Types...>::index;
+        static_cast<Derived*>(this)-> template set_current<get_index_by_type<0, T, Types...>::index>();
     }
 
     void destroy(){
@@ -121,7 +121,7 @@ private:
             if constexpr(N == 0){
                 return head;
             }else{
-                tail. template get_value<N-1, T>();
+                return tail. template get_value<N-1, T>();
             }
         }
         template<size_t N ,typename T>
@@ -129,14 +129,13 @@ private:
             if constexpr(N == 0){
                 return head;
             }else{
-                tail. template get_value<N-1, T>();
+                return tail. template get_value<N-1, T>();
             }
         }
 
         template<size_t N, typename T>
         void des(){
             if constexpr(N == 0){
-                std::cout << "destroy\n";
                 head.~T();
             }else{
                 tail. template des<N-1, T>();
@@ -145,13 +144,17 @@ private:
     };
     
     public:
-    static size_t current;
+    size_t current;
     VarUnion<Types...> storage;
     size_t index() const{
         return current;
     }
 
-    //template<typename T>
+    template<size_t N>
+    void set_current() noexcept{
+        current = N;
+    }
+
     bool operator==(const variant& other) const noexcept{
         if (current != other.current){
             return false;
@@ -178,11 +181,11 @@ private:
     }*/
 
     template<typename T>
-    T& get() {
+    T& get() {       
         if (current == get_index_by_type<0, T, Types...>::index){
             return storage. template get_value<get_index_by_type<0, T, Types...>::index, T>();
         }else{
-            throw std::bad_alloc();
+            throw std::bad_variant_access{};
         }
     } 
     template<typename T>
@@ -190,9 +193,9 @@ private:
         if (current == get_index_by_type<0, T, Types...>::index){
             return storage. template get_value<get_index_by_type<0, T, Types...>::index, T>();
         }else{
-            throw std::bad_alloc();
+            throw std::bad_variant_access{};
         }
-    } 
+    }
 
     template<typename T>
     bool holds_alternative() const {
@@ -206,18 +209,8 @@ private:
     }
 
 };
-template<typename... Types>
-size_t variant<Types...>::current = 0;
 
-union B{
-    std::string s;
-    int i;
-
-    B(){};
-    ~B(){};
-};
-
-class S{
+/*class S{
     public:
     size_t* t;
 
@@ -230,7 +223,7 @@ class S{
     }
 
     S& operator=(S&& other) noexcept{
-        if(!this){
+        if(!t){
             delete t;
         }
         t = other.t;
@@ -243,15 +236,20 @@ class S{
     ~S(){
        delete t;
     }
-};
+};*/
 
 
 int main(){
-    variant<int, double> f(3);
-    variant<int, double> g(7);
-    f = g;
-    std::cout << (f == g) << "\n";
-    //std::variant<int, double> f;
+    variant<int, double, std::string> f("sdfs");
+    variant<int, double> g(7.5);
+    //f = 4.5;
+    std::cout << f.get<std::string>() << "\n";
+    //f = g;
+    //f = 9.4;
+    //std::cout << f.holds_alternative<double>() << "\n";
+    //std::cout << (f == g) << "\n";
+    //std::variant<int, double> h(4);
+    //std::cout << std::holds_alternative<int>(h) << "\n";
     //std::variant<int, double> g;
     //std::cout << (f == g) << "\n";
 
