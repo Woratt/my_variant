@@ -51,6 +51,36 @@ struct is_equal{
     }
 };
 
+template<size_t index , typename... Types>
+struct copy{
+    static void make_copy(size_t current, const variant<Types...>& from, variant<Types...>& to){
+        if(current == index){
+            using T = typename get_type_by_index<index, Types...>::type;
+            to.storage. template put<index, T>(from. template get<T>()); 
+            to. template set_current<index>();
+        }else{
+            if constexpr(index + 1 < sizeof...(Types)){
+                copy<index + 1, Types...>::make_copy(current, from, to);
+            }
+        }
+    }
+};
+
+template<size_t index , typename... Types>
+struct move{
+    static void make_move(size_t current, variant<Types...>&& from, variant<Types...>& to){
+        if(current == index){
+            using T = typename get_type_by_index<index, Types...>::type;
+            to.storage.template put<index, T>(std::move(from.template get<T>())); 
+            to.template set_current<index>();
+        }else{
+            if constexpr(index + 1 < sizeof...(Types)){
+                move<index + 1, Types...>::make_move(current, std::move(from), to);
+            }
+        }
+    }
+};
+
 template<typename T, typename... Types>
 struct VariantAlternative{
 
@@ -150,6 +180,14 @@ private:
         return current;
     }
 
+    variant(const variant& other) noexcept {
+        copy<0, Types...>::make_copy(other.current, other, *this);
+    }
+
+    variant(variant&& other) noexcept {
+        move<0, Types...>::make_move(other.current, std::move(other), *this);
+    }    
+
     template<size_t N>
     void set_current() noexcept{
         current = N;
@@ -164,6 +202,10 @@ private:
         }
     }
 
+    bool operator!=(const variant& other) const noexcept{
+        return !(*this == other);
+    }
+
     template<typename T>
     variant& operator=(const T& value) noexcept{
         (VariantAlternative<Types, Types...>::destroy(), ...);
@@ -173,12 +215,13 @@ private:
     }
 
 
-    /*variant& operator=(const variant& other) noexcept{
-        if()
-        (VariantAlternative<Types, Types...>::destroy(), ...);
-        this->storage. template put<get_index_by_type<0, decltype(other->storage. template get_value<>), Types...>::index>(other->get<T>());
-        current = get_index_by_type<0, T, Types...>::index;
-    }*/
+    variant& operator=(const variant& other) noexcept{
+        if(this != &other){
+            (VariantAlternative<Types, Types...>::destroy(), ...);
+            copy<0, Types...>::make_copy(other.current, other, *this);
+        }
+        return *this;
+    }
 
     template<typename T>
     T& get() {       
@@ -210,48 +253,97 @@ private:
 
 };
 
-/*class S{
-    public:
-    size_t* t;
+using std::string;
 
-    S(const S&) = delete;
-    S& operator=(const S&) = delete;
-    S(){};
+void test_basic_assignment_and_get() {
+    variant<int, double, string> v;
+    v = 42;
+    assert(v.holds_alternative<int>());
+    assert(v.get<int>() == 42);
 
-    S(S&& other) noexcept : t(other.t) {
-        other.t = nullptr;
+    v = 3.14;
+    assert(v.holds_alternative<double>());
+    assert(v.get<double>() == 3.14);
+
+    v = string("hello");
+    assert(v.holds_alternative<string>());
+    assert(v.get<string>() == "hello");
+}
+
+void test_copy_constructor() {
+    variant<int, double, string> v1;
+    v1 = string("copy");
+
+    variant<int, double, string> v2(v1);
+
+    assert(v2.holds_alternative<string>());
+    assert(v2.get<string>() == "copy");
+}
+
+void test_assignment_operator() {
+    variant<int, double, string> v1;
+    v1 = 5;
+
+    variant<int, double, string> v2;
+    v2 = string("text");
+
+    v2 = v1;
+
+    assert(v2.holds_alternative<int>());
+    assert(v2.get<int>() == 5);
+}
+
+void test_equality_operator() {
+    variant<int, double, string> v1 = 10;
+    variant<int, double, string> v2 = 10;
+    variant<int, double, string> v3 = string("10");
+
+    assert(v1 == v2);
+    assert(v1 != v3);
+}
+
+void test_move_constructor() {
+    variant<int, double, string> v1;
+    v1 = string("moved");
+
+    variant<int, double, string> v2(std::move(v1));
+
+    assert(v2.holds_alternative<string>());
+    assert(v2.get<string>() == "moved");
+}
+
+void test_move_assignment() {
+    variant<int, double, string> v1 = 123;
+    variant<int, double, string> v2;
+    v2 = std::move(v1);
+
+    assert(v2.holds_alternative<int>());
+    assert(v2.get<int>() == 123);
+}
+
+void test_bad_variant_access() {
+    variant<int, double, string> v;
+    v = 3.14;
+
+    try {
+        v.get<int>();
+        assert(false); 
+    } catch (const std::bad_variant_access&) {
+        assert(true); 
     }
+}
 
-    S& operator=(S&& other) noexcept{
-        if(!t){
-            delete t;
-        }
-        t = other.t;
-        other.t = nullptr;
-        return *this;
-    }
+int main() {
+    test_basic_assignment_and_get();
+    test_copy_constructor();
+    test_assignment_operator();
+    test_equality_operator();
+    test_move_constructor();
+    test_move_assignment();
+    test_bad_variant_access();
 
-    S(const size_t& t): t(new size_t(t)){}
-    S(size_t&& t): t(new size_t(t)){};
-    ~S(){
-       delete t;
-    }
-};*/
-
-
-int main(){
-    variant<int, double, std::string> f("sdfs");
-    variant<int, double> g(7.5);
-    //f = 4.5;
-    std::cout << f.get<std::string>() << "\n";
-    //f = g;
-    //f = 9.4;
-    //std::cout << f.holds_alternative<double>() << "\n";
-    //std::cout << (f == g) << "\n";
-    //std::variant<int, double> h(4);
-    //std::cout << std::holds_alternative<int>(h) << "\n";
-    //std::variant<int, double> g;
-    //std::cout << (f == g) << "\n";
-
+    std::cout << "Усі тести пройдені успішно.\n";
     return 0;
 }
+
+
