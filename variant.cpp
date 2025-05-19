@@ -173,9 +173,19 @@ private:
         }
     };
     
-    public:
     size_t current;
     VarUnion<Types...> storage;
+
+    template<typename T, typename... AllTypes>
+    friend struct VariantAlternative;
+
+    template<size_t index , typename... AllTypes>
+    friend struct copy;
+
+    template<size_t index , typename... AllTypes>
+    friend struct move;
+
+    public:
     size_t index() const{
         return current;
     }
